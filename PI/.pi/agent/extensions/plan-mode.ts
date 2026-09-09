@@ -50,7 +50,7 @@ export default function planModeExtension(pi: ExtensionAPI) {
 		updateStatus(ctx);
 		ctx.ui.notify(
 			next === "plan"
-				? "已进入 PLAN 模式：只读规划，禁止修改文件与执行命令。产出方案后请按 Tab 或 /build 退出。"
+				? "已进入 PLAN 模式：只读规划，禁止修改文件与执行命令。产出方案后请按 Alt+X 或 /build 退出。"
 				: "已退出 PLAN 模式，恢复全权访问。",
 			"info"
 		);
@@ -71,8 +71,9 @@ export default function planModeExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	// Tab 快捷键：plan / build 一键切换
-	pi.registerShortcut("tab", {
+	// Alt+X 快捷键：plan / build 一键切换
+	// （最初用 ctrl+tab，但终端/VS Code 均占用 tab 组合；alt+x 在 pi 内置、Windows Terminal、VS Code 集成终端均无冲突）
+	pi.registerShortcut("alt+x", {
 		description: "切换 PLAN / BUILD 模式",
 		handler: async (ctx) => {
 			setMode(mode === "plan" ? "build" : "plan", ctx);
@@ -158,18 +159,93 @@ export default function planModeExtension(pi: ExtensionAPI) {
 		return BASH_READ_COMMANDS.has(cmd);
 	}
 
+	/**
+	 * 引号感知扫描一条 bash 命令：
+	 * - 按引号外分隔符（;、&&、||、|、&、换行）切分为多个片段；引号（' " `）内的
+	 *   分隔符不会被误切（如 grep -n "a\|b" file | head 中 \| 里的 | 是字面量）
+	 * - 引号外出现 < > 时仅放行安全重定向（>/dev/null、2>&1、2>&- 等），
+	 *   其余（>file、2>1、<file、>>file 等）一律标记为写操作
+	 */
+	function scanBashCommand(command: string): { segments: string[]; hasUnquotedRedirect: boolean } {
+		const segments: string[] = [];
+		let current = "";
+		let hasUnquotedRedirect = false;
+		let quote: "'" | '"' | "`" | null = null;
+		let i = 0;
+		const len = command.length;
+
+		while (i < len) {
+			const ch = command[i];
+
+			if (quote === null) {
+				if (ch === "'" || ch === '"' || ch === "`") {
+					quote = ch;
+					current += ch;
+					i++;
+					continue;
+				}
+				if (ch === "\\") {
+					// 引号外反斜杠转义下一个字符，原样保留（如 \; 不是分隔符）
+					current += ch;
+					if (i + 1 < len) {
+						current += command[i + 1];
+						i += 2;
+					} else {
+						i++;
+					}
+					continue;
+				}
+				if (ch === ";" || ch === "|" || ch === "\n" || ch === "&") {
+					// 分隔符（含单个 & 的后台执行）：&& 占两个字符
+					segments.push(current);
+					current = "";
+					i += ch === "&" && command[i + 1] === "&" ? 2 : 1;
+					continue;
+				}
+				if (ch === "<" || ch === ">") {
+					// 安全重定向：[<>]{1,2} 后跟 /dev/null 或 &[0-9-]（如 >/dev/null、2>&1、>&-）
+					const rest = command.slice(i);
+					const safe = /^(?:[<>]{1,2})\s*(\/dev\/null|&[0-9-])/.exec(rest);
+					if (safe) {
+						current += rest.slice(0, safe[0].length);
+						i += safe[0].length;
+					} else {
+						hasUnquotedRedirect = true;
+						current += ch;
+						i++;
+					}
+					continue;
+				}
+				current += ch;
+				i++;
+				continue;
+			}
+
+			// 引号内：双引号处理 \" \\ \$ \` 转义，其余原样累积
+			if (quote === '"' && ch === "\\" && i + 1 < len && ['"', "\\", "$", "`"].includes(command[i + 1])) {
+				current += ch + command[i + 1];
+				i += 2;
+				continue;
+			}
+			current += ch;
+			if (ch === quote) {
+				quote = null;
+			}
+			i++;
+		}
+
+		if (current.trim()) segments.push(current);
+		return {
+			segments: segments.map((s) => s.trim()).filter(Boolean),
+			hasUnquotedRedirect,
+		};
+	}
+
 	function isReadOnlyBashCommand(command: string): boolean {
 		const trimmed = command.trim();
 		if (!trimmed) return false;
-		// 剥离安全的 fd 重定向（2>&1、1>&2、2>&-、>/dev/null 等），
-		// 剩余若还有 < > 则是文件重定向 → 视为写操作
-		const withoutFdRedirect = trimmed.replace(
-			/(?:[0-9]?&?|&)[<>]{1,2}(?:&[0-9-]|&-|[0-9]|\s*\/dev\/null)/g,
-			""
-		);
-		if (/[<>]/.test(withoutFdRedirect)) return false;
-		// 管道/分号/逻辑符分割后，每个片段都必须只读
-		const segments = trimmed.split(/\s*(?:;|&&|\|\||\||\n)\s*/).filter(Boolean);
+		const { segments, hasUnquotedRedirect } = scanBashCommand(trimmed);
+		if (hasUnquotedRedirect) return false;
 		return segments.length > 0 && segments.every((seg) => isReadOnlySegment(seg));
 	}
 
@@ -183,18 +259,18 @@ export default function planModeExtension(pi: ExtensionAPI) {
 
 		return {
 			block: true,
-			reason: `Plan mode: 只读规划阶段，${event.toolName} 被禁用。请勿重试或尝试绕过；改用只读操作（read/grep/find/ls、git log/status/diff/show、cat/head/tail、find/grep 等）；如需修改请按 Tab 或 /build 退出。`,
+			reason: `Plan mode: 只读规划阶段，${event.toolName} 被禁用。请勿重试或尝试绕过；改用只读操作（read/grep/find/ls、git log/status/diff/show、cat/head/tail、find/grep 等）；如需修改请按 Alt+X 或 /build 退出。`,
 		};
 	});
 
-	// 注入规划指令，引导模型产出可执行方案
+	// 注入模式指令：PLAN 时限制只读，BUILD 时明确已恢复全权访问，
+	// 避免模型沿用历史中的 PLAN 指令、误以为自己仍在规划阶段
 	pi.on("before_agent_start", async (event) => {
-		if (mode !== "plan") return undefined;
-
-		return {
-			systemPrompt:
-				event.systemPrompt +
-				`
+		if (mode === "plan") {
+			return {
+				systemPrompt:
+					event.systemPrompt +
+					`
 
 ## PLAN 模式（只读规划阶段）
 
@@ -212,13 +288,31 @@ export default function planModeExtension(pi: ExtensionAPI) {
 被拦截时的行为：
 - 不要反复重试、不要尝试绕过拦截（如用 python 替代 shell、加 2>&1 规避检查）
 - 改用允许的只读命令达成同一查看/分析目标
-- 确实需要写操作时，直接告知用户：按 Tab 或 /build 退出 PLAN 模式
+- 确实需要写操作时，直接告知用户：按 Alt+X 或 /build 退出 PLAN 模式
 
 工作方式：
 - 理解需求 → 澄清边界 → 产出一份可执行的实现方案
 - 方案直接在对话中输出，不写入任何文件，至少包含：步骤、涉及文件、关键改动点、风险
 - 存在歧义时用简短问题澄清，不要擅自假设
-- 方案产出后提醒用户按 Tab 或 /build 退出规划模式再执行
+- 方案产出后提醒用户按 Alt+X 或 /build 退出规划模式再执行
+`,
+			};
+		}
+
+		return {
+			systemPrompt:
+				event.systemPrompt +
+				`
+
+## BUILD 模式（全权访问）
+
+你当前处于 BUILD 模式：已退出只读规划阶段，恢复全权访问。edit/write/bash 等写操作均可用，无需再按 Alt+X 或 /build 退出。
+
+若历史消息中存在 PLAN 模式的只读限制说明，一律作废，以本条为准。
+
+工作方式：
+- 直接执行用户批准的方案，不要再重复产出规划
+- 改完代码按项目规范验证（编译 / 格式化 / 测试）
 `,
 		};
 	});

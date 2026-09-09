@@ -14,7 +14,7 @@
  *   - ctx.ui.setStatus         状态栏实时显示 [PLAN] / [BUILD]
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 export default function planModeExtension(pi: ExtensionAPI) {
 	// plan 模式下放行的只读工具白名单；其余工具一律拦截
@@ -31,31 +31,51 @@ export default function planModeExtension(pi: ExtensionAPI) {
 	// 初始模式：环境变量 PI_PLAN_MODE=1 启动即进入 plan；否则默认 build
 	let mode: "plan" | "build" = process.env.PI_PLAN_MODE === "1" ? "plan" : "build";
 
+	// 状态栏颜色：BUILD 蓝色、PLAN 橙色（ANSI truecolor）
+	const COLOR_BUILD = "\x1B[38;2;0;140;255m"; // 蓝
+	const COLOR_PLAN = "\x1B[38;2;255;150;0m"; // 橙
+	const COLOR_RESET = "\x1B[39m";
+
 	function updateStatus(ctx: { ui: { setStatus: (id: string, text: string) => void } }) {
-		const theme = ctx.ui.theme as { fg: (color: string, text: string) => string };
 		if (mode === "plan") {
-			ctx.ui.setStatus("plan-mode", theme.fg("warning", " [PLAN] 只读规划模式（/build 退出）"));
+			ctx.ui.setStatus("plan-mode", `${COLOR_PLAN} [PLAN]${COLOR_RESET}`);
 		} else {
-			ctx.ui.setStatus("plan-mode", theme.fg("success", " [BUILD] 全权模式"));
+			ctx.ui.setStatus("plan-mode", `${COLOR_BUILD} [BUILD]${COLOR_RESET}`);
 		}
+	}
+
+	// 切换模式并刷新状态栏 + 通知
+	function setMode(next: "plan" | "build", ctx: ExtensionContext) {
+		mode = next;
+		updateStatus(ctx);
+		ctx.ui.notify(
+			next === "plan"
+				? "已进入 PLAN 模式：只读规划，禁止修改文件与执行命令。产出方案后请按 Tab 或 /build 退出。"
+				: "已退出 PLAN 模式，恢复全权访问。",
+			"info"
+		);
 	}
 
 	// /plan 与 /build 切换命令
 	pi.registerCommand("plan", {
 		description: "进入规划模式（只读，禁止修改/执行命令，产出对话内方案）",
 		handler: async (_args, ctx) => {
-			mode = "plan";
-			updateStatus(ctx);
-			ctx.ui.notify("已进入 PLAN 模式：只读规划，禁止修改文件与执行命令。产出方案后请用 /build 退出。", "info");
+			setMode("plan", ctx);
 		},
 	});
 
 	pi.registerCommand("build", {
 		description: "退出规划模式，恢复全权访问",
 		handler: async (_args, ctx) => {
-			mode = "build";
-			updateStatus(ctx);
-			ctx.ui.notify("已退出 PLAN 模式，恢复全权访问。", "info");
+			setMode("build", ctx);
+		},
+	});
+
+	// Tab 快捷键：plan / build 一键切换
+	pi.registerShortcut("tab", {
+		description: "切换 PLAN / BUILD 模式",
+		handler: async (ctx) => {
+			setMode(mode === "plan" ? "build" : "plan", ctx);
 		},
 	});
 

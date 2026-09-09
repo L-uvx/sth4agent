@@ -161,8 +161,13 @@ export default function planModeExtension(pi: ExtensionAPI) {
 	function isReadOnlyBashCommand(command: string): boolean {
 		const trimmed = command.trim();
 		if (!trimmed) return false;
-		// 任何重定向/here-doc → 视为写操作
-		if (/[<>]/.test(trimmed)) return false;
+		// 剥离安全的 fd 重定向（2>&1、1>&2、2>&-、>/dev/null 等），
+		// 剩余若还有 < > 则是文件重定向 → 视为写操作
+		const withoutFdRedirect = trimmed.replace(
+			/(?:[0-9]?&?|&)[<>]{1,2}(?:&[0-9-]|&-|[0-9]|\s*\/dev\/null)/g,
+			""
+		);
+		if (/[<>]/.test(withoutFdRedirect)) return false;
 		// 管道/分号/逻辑符分割后，每个片段都必须只读
 		const segments = trimmed.split(/\s*(?:;|&&|\|\||\||\n)\s*/).filter(Boolean);
 		return segments.length > 0 && segments.every((seg) => isReadOnlySegment(seg));
@@ -178,7 +183,7 @@ export default function planModeExtension(pi: ExtensionAPI) {
 
 		return {
 			block: true,
-			reason: `Plan mode: 只读规划阶段，${event.toolName} 被禁用。允许只读工具（read/grep/find/ls 等）与只读 bash 命令（git log/status/diff、cat/head/tail、find/grep 等）；如需修改，请用 /build 退出规划模式。`,
+			reason: `Plan mode: 只读规划阶段，${event.toolName} 被禁用。请勿重试或尝试绕过；改用只读操作（read/grep/find/ls、git log/status/diff/show、cat/head/tail、find/grep 等）；如需修改请按 Tab 或 /build 退出。`,
 		};
 	});
 
@@ -193,14 +198,27 @@ export default function planModeExtension(pi: ExtensionAPI) {
 
 ## PLAN 模式（只读规划阶段）
 
-你当前处于 PLAN 模式，只做分析与规划，不执行任何修改：
+你当前处于 PLAN 模式：只读分析与规划，禁止一切修改。所有写操作已被工具强制拦截，无法绕过。
 
-- 禁止修改任何文件、禁止执行写操作命令（rm/mv/cp/mkdir、git commit/push/add、构建、安装等已被强制拦截，请勿尝试）
-- 允许只读操作：阅读代码与文档、搜索、查看目录，以及只读 bash 命令（git log/status/diff/show、cat/head/tail、find/grep、pwd/which/env 等）
-- 目标：理解需求 → 澄清边界 → 产出一份可执行的实现方案
-- 方案直接在对话中输出，不要写入任何文件，至少包含：步骤、涉及文件、关键改动点、风险
-- 需要用户确认或存在歧义时，用简短问题澄清，不要擅自假设
-- 方案产出后，提醒用户输入 /build 退出规划模式再执行
+允许的操作：
+- 只读工具：read、grep、find、ls、vscode_get_diagnostics、todo、questionnaire
+- 只读 bash 查看类命令：git log/status/diff/show/stash list/remote -v、cat/head/tail/sed/grep/find/ls/wc/sort/uniq/awk、pwd/which/env/ps/free/du/df 等（可管道组合多个只读命令）
+
+会被拦截、请勿尝试的操作：
+- 文件修改：edit、write、rm、mv、cp、touch、mkdir、重定向 >、>>、< 等
+- git 写操作：commit、push、add、branch -d、config 写入等
+- 脚本/构建/安装/网络/解压：python、node、npm、pip、make、cmake、curl、wget、unzip、tar 等
+
+被拦截时的行为：
+- 不要反复重试、不要尝试绕过拦截（如用 python 替代 shell、加 2>&1 规避检查）
+- 改用允许的只读命令达成同一查看/分析目标
+- 确实需要写操作时，直接告知用户：按 Tab 或 /build 退出 PLAN 模式
+
+工作方式：
+- 理解需求 → 澄清边界 → 产出一份可执行的实现方案
+- 方案直接在对话中输出，不写入任何文件，至少包含：步骤、涉及文件、关键改动点、风险
+- 存在歧义时用简短问题澄清，不要擅自假设
+- 方案产出后提醒用户按 Tab 或 /build 退出规划模式再执行
 `,
 		};
 	});

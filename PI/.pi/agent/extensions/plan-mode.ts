@@ -18,14 +18,44 @@ import { isToolCallEventType, type ExtensionAPI, type ExtensionContext } from "@
 
 export default function planModeExtension(pi: ExtensionAPI) {
 	// plan 模式下放行的只读工具白名单；其余工具一律拦截
+	// 只读工具白名单。同时收录 pi 内置工具名与扩展提供的等价工具名，
+	// 避免因装了搜索/诊断类扩展（pi-fff、pi-lens、rpiv-*）导致规划模式下无工具可用。
+	// 注意：写入类工具（edit、write、ast_grep_replace、lens_diagnostic_mark、subagent）
+	// 永远不在此列表中。
 	const READ_ONLY_TOOLS = new Set([
+		// 核心文件读取
 		"read",
+		"ls",
+		// 搜索：内置 grep/find 与 pi-fff 两套命名（tools-and-ui / override 模式）
 		"grep",
 		"find",
-		"ls",
-		"vscode_get_diagnostics",
-		"todo",
+		"ffgrep",
+		"fffind",
+		"fff-multi-grep",
+		"multi_grep",
+		// 交互与进度跟踪（只改会话状态，不触碰项目文件）
+		"ask_user_question",
 		"questionnaire",
+		"todo",
+		// pi-lens 只读能力（结构化浏览、诊断、情境工具激活）
+		"symbol_search",
+		"module_report",
+		"project_report",
+		"read_symbol",
+		"read_enclosing",
+		"lens_diagnostics",
+		"pi_lens_activate_tools",
+		"ast_grep_search",
+		"ast_grep_outline",
+		"lsp_navigation",
+		"vscode_get_diagnostics",
+		// 环境自省
+		"effective_config",
+		// 联网调研（只读，不修改项目）
+		"web_search",
+		"fetch_content",
+		"get_search_content",
+		"source_check",
 	]);
 
 	// 初始模式：环境变量 PI_PLAN_MODE=1 启动即进入 plan；否则默认 build
@@ -259,7 +289,7 @@ export default function planModeExtension(pi: ExtensionAPI) {
 
 		return {
 			block: true,
-			reason: `Plan mode: 只读规划阶段，${event.toolName} 被禁用。请勿重试或尝试绕过；改用只读操作（read/grep/find/ls、git log/status/diff/show、cat/head/tail、find/grep 等）；如需修改请按 Alt+X 或 /build 退出。`,
+			reason: `Plan mode: 只读规划阶段，${event.toolName} 被禁用。请勿重试或尝试绕过；改用只读操作（read/ffgrep/fffind/symbol_search/lens_diagnostics、git log/status/diff/show、cat/head/tail 等）；如需修改请按 Alt+X 或 /build 退出。`,
 		};
 	});
 
@@ -277,7 +307,11 @@ export default function planModeExtension(pi: ExtensionAPI) {
 你当前处于 PLAN 模式：只读分析与规划，禁止一切修改。所有写操作已被工具强制拦截，无法绕过。
 
 允许的操作：
-- 只读工具：read、grep、find、ls、vscode_get_diagnostics、todo、questionnaire
+- 读取与浏览：read、ls
+- 搜索：ffgrep（内容）、fffind（文件名）、fff-multi-grep（多模式 OR）；若为 override 模式则为 grep/find/multi_grep
+- 结构化浏览与诊断（pi-lens）：symbol_search、module_report、project_report、read_symbol、read_enclosing、lens_diagnostics、pi_lens_activate_tools（可激活 ast_grep_search / ast_grep_outline / lsp_navigation 等只读情境工具）
+- 交互与跟踪：ask_user_question、todo
+- 联网调研：web_search、fetch_content、get_search_content、source_check
 - 只读 bash 查看类命令：git log/status/diff/show/stash list/remote -v、cat/head/tail/sed/grep/find/ls/wc/sort/uniq/awk、pwd/which/env/ps/free/du/df 等（可管道组合多个只读命令）
 
 会被拦截、请勿尝试的操作：

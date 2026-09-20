@@ -1,0 +1,5 @@
+# vsix build output: published to GitHub Releases, never committed.
+*.vsix
+
+# Left behind by `npx @vscode/vsce package`.
+node_modules/

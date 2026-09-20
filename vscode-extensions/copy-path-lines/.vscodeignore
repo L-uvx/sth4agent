@@ -1,0 +1,2 @@
+# Development-only regression harness, not needed at runtime.
+verify.js

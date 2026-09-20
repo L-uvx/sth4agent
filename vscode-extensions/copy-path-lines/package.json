@@ -1,0 +1,72 @@
+{
+  "name": "copy-path-lines",
+  "displayName": "Copy Path with Line Range",
+  "description": "Copy the current selection as a path#L12-L34 reference (workspace-relative or absolute).",
+  "publisher": "local",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "copy",
+    "path",
+    "line number",
+    "reference",
+    "clipboard"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/L-uvx/sth4agent.git",
+    "directory": "vscode-extensions/copy-path-lines"
+  },
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "copyPathLines.copyRelative",
+        "title": "Copy Reference (Relative Path)",
+        "category": "Copy Reference",
+        "enablement": "editorIsOpen"
+      },
+      {
+        "command": "copyPathLines.copyAbsolute",
+        "title": "Copy Reference (Absolute Path)",
+        "category": "Copy Reference",
+        "enablement": "editorIsOpen"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "copyPathLines.copyRelative",
+        "key": "ctrl+alt+r",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "copyPathLines.copyAbsolute",
+        "key": "ctrl+alt+k",
+        "when": "editorTextFocus"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "copyPathLines.copyRelative",
+          "group": "9_cutcopypaste@100",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "copyPathLines.copyAbsolute",
+          "group": "9_cutcopypaste@101",
+          "when": "editorTextFocus"
+        }
+      ]
+    }
+  }
+}

@@ -3,3 +3,12 @@
 
 # Left behind by `npx @vscode/vsce package`.
 node_modules/
+
+# Python 缓存与虚拟环境
+__pycache__/
+*.py[cod]
+
+# wpsv7-skills：本机虚拟环境与登录态缓存（含会话 cookie），不入 git
+skills/wpsv7-skills/.venv/
+skills/wpsv7-skills/.wps_sid_cache.json
+skills/wpsv7-skills/skills/bin/

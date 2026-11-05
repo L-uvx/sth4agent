@@ -9,7 +9,7 @@
 | 目录 | 内容 | 部署方式 |
 | --- | --- | --- |
 | `PI/` | pi agent 扩展（plan-mode、thinking-collapse） | 复制到 `~/.pi/agent/extensions/` |
-| `skills/` | 跨项目复用的 skill | 复制到 `~/.pi/agent/skills/<name>/` |
+| `skills/` | 跨项目复用的 skill | 复制到 agent 的 skills 目录（见第二节） |
 | `dsh-plugins/` | DSH（DeepSeek Harness）Web UI 插件 | 加进 DSH profile 的依赖与 bundles（见第三节） |
 | `vscode-extensions/` | VSCode 扩展源码 | 运行 `vscode-extensions/install.ps1`（见第四节） |
 
@@ -22,8 +22,27 @@
 
 * skill：
 
-1. 把 `skills/<name>/` 整个目录复制到 `~/.pi/agent/skills/<name>/`
+1. 把 `skills/<name>/` 整个目录复制到 agent 的 skills 目录（pi：`~/.pi/agent/skills/`，DSH：`~/.dsh/skills/`，cc-switch：`~/.cc-switch/skills/`）
 2. 新会话即可被自动发现
+
+| skill | 说明 |
+| --- | --- |
+| [`chinese-language`](skills/chinese-language/SKILL.md) | 思考与输出保持中文 |
+| [`cpp-qt-development`](skills/cpp-qt-development/SKILL.md) | Qt/C++ 开发约定：CMake、信号槽、MVC 分层、Widgets |
+| [`encoding-utf8`](skills/encoding-utf8/SKILL.md) | 源文件与 CMake 的 UTF-8 / BOM 编码规范 |
+| [`git-commit`](skills/git-commit/SKILL.md) | 禁止自动提交，只生成规范的提交信息 |
+| [`markdown-style`](skills/markdown-style/SKILL.md) | Markdown 标题、编号、引文格式统一 |
+| [`wpsv7-skills`](skills/wpsv7-skills/README.md) | WPS 365 V7 工具集：通讯录、日历、会议、云文档、IM |
+
+前五个是纯提示词 skill，复制即用。`wpsv7-skills` 带 Python 依赖，多一步建虚拟环境：
+
+```sh
+cd <agent 的 skills 目录>/wpsv7-skills
+python3 -m venv .venv
+.venv/bin/python3 -m pip install -r requirements.txt
+```
+
+它的 `wps_sid` 由 Agent 从 `365.kdocs.cn` 的浏览器 cookie 取得后写入同目录 `.wps_sid_cache.json`；缓存文件与 `.venv` 都已列入 `.gitignore`，不会入库。
 
 ## 三、DSH 插件
 

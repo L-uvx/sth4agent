@@ -43,25 +43,54 @@ Windows 写成 `link:D:/project/sth4agent/dsh-plugins/codeplan-usage`。
 
 Host 半边是 ESM，加载后不热更新，必须重启宿主进程。插件自带 `cordis.patch.yml`，bundle 挂上后会自动 `insert` 这一行，不需要手动改 `cordis.yml`。
 
-## 获取 token
+## 配置 token
 
-在 <https://ai-kas.kso.net/codeplan/> 的浏览器 console 里执行：
+token 是 console 的登录态，同一账号可在多设备复用。在任意一台**已登录** <https://ai-kas.kso.net/codeplan/> 的机器上取一次即可：
 
 ```js
 copy(localStorage.getItem('wps_console_token'))
 ```
 
-然后在状态条面板里粘贴保存。
+### 三种来源与优先级
 
-token 读取优先级：
+| 顺序 | 位置 | 写入方式 | 是否需重启 |
+| --- | --- | --- | --- |
+| 1 | 环境变量 `CODEPLAN_CONSOLE_TOKEN` | 启动宿主前设置 | 是 |
+| 2 | `$DSH_HOME/codeplan-token` | UI 粘贴，或手写文件 | UI 粘贴否 / 手写是 |
+| 3 | `~/.pi/agent/codeplan-token` | 已有 pi 扩展时自动复用 | 否 |
 
-| 顺序 | 位置 | 说明 |
-| --- | --- | --- |
-| 1 | 环境变量 `CODEPLAN_CONSOLE_TOKEN` | 适合临时覆盖 |
-| 2 | `$DSH_HOME/codeplan-token` | UI 保存到这里，权限 `0600` |
-| 3 | `~/.pi/agent/codeplan-token` | 沿用 pi 扩展已存的 token，省一次配置 |
+`$DSH_HOME` 未设置时按 `~/.dsh` 处理，所以默认落盘位置是 `~/.dsh/codeplan-token`；Windows 上是 `C:\Users\<user>\.dsh\codeplan-token`。文件内容为单行明文 token，读取时会 trim。
 
-新设备上如果已经在用同目录的 pi 扩展，通常第 3 条会直接命中，开箱即用。
+最省事的路径是 **UI 粘贴**：装好插件重启后，状态条显示「未配置 · 点击粘贴 token」，点开面板粘贴保存即可。Host 会立刻写文件（`0600`）并强制取一次数，不需要再重启。
+
+新设备上如果已经在用 pi 扩展，第 3 条会直接命中，装完插件重启就开箱可用。
+
+### 三个容易踩的坑
+
+1. **token 只在插件加载时读一次**。`resolveToken()` 在 `apply()` 里调用，没有文件监听。因此环境变量和手写文件都必须重启宿主才生效；只有 UI 粘贴是即时的，它直接改内存并落盘。
+2. **环境变量会永久压制 UI 粘贴的 token**。之前设过 `CODEPLAN_CONSOLE_TOKEN` 的话，在 UI 里更新 token 只对当前进程有效，下次重启又会回到环境变量里的旧值，表现为「明明更新过，重启又失效」。要么别设环境变量，要么两处一起改。
+3. **校验规则不是严格的 36 位**。占位符写「36 位 token」只是提示，实际按 `^[\w.-]{16,128}$` 校验。token 里若含 `+` `/` `=` 会被拒成「看起来不是 console token」。
+
+另外 UI 没有「清除 token」的入口，清除只能打接口：
+
+```sh
+curl -X POST localhost:<web-port>/plugins/codeplan-usage/token \
+  -H 'content-type: application/json' -d '{"clear":true}'
+```
+
+清完同样需要重启。
+
+### 验证
+
+```sh
+curl -s localhost:<web-port>/plugins/codeplan-usage/snapshot
+```
+
+`configured` 为 `true`、`error` 为 `null`、`monthUsedCny` 有数值即配置成功；`needsSetup` 为 `true` 则是登录态失效（见下）。
+
+### token 失效
+
+上游返回 `100401` 会把状态置为 `needsSetup`，此后**彻底停止取数**，状态条显示「登录态失效，请重新粘贴 token」。重新粘贴一个有效 token 即恢复，不需要重启。
 
 ## 刷新时机
 

@@ -37,7 +37,7 @@ pnpm add "link:/abs/path/to/sth4agent/dsh-plugins/codeplan-usage"
 
 再把 `@local/codeplan-usage` 加进该 profile `package.json` 的 `dsh.profile.bundles`，然后重启 DSH（Host 半边是 ESM，不热更新）。插件自带 `cordis.patch.yml`，bundle 挂上后会自行注册，不必手改 `cordis.yml`。
 
-各插件的配置项、token 位置、可调参数见其目录下的 README。
+首次使用还需要配 token（或复用 `~/.pi/agent/codeplan-token`）；各插件的 token 来源优先级、配置项与可调参数见其目录下的 README。
 
 ## 四、VSCode 扩展
 

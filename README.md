@@ -2,7 +2,7 @@
 
 * **定位：** 跨设备复用的 AI coding agent 配置与工具集
 * **用法：** clone 到任意设备，按下方目录说明各取所需
-* **核心结论：** 三类内容互不依赖，只装需要的即可
+* **核心结论：** 四类内容互不依赖，只装需要的即可
 
 ## 一、目录结构
 
@@ -10,7 +10,8 @@
 | --- | --- | --- |
 | `PI/` | pi agent 扩展（plan-mode、thinking-collapse） | 复制到 `~/.pi/agent/extensions/` |
 | `skills/` | 跨项目复用的 skill | 复制到 `~/.pi/agent/skills/<name>/` |
-| `vscode-extensions/` | VSCode 扩展源码 | 运行 `vscode-extensions/install.ps1`（见第三节） |
+| `dsh-plugins/` | DSH（DeepSeek Harness）Web UI 插件 | 加进 DSH profile 的依赖与 bundles（见第三节） |
+| `vscode-extensions/` | VSCode 扩展源码 | 运行 `vscode-extensions/install.ps1`（见第四节） |
 
 ## 二、pi 扩展与 skill
 
@@ -24,7 +25,21 @@
 1. 把 `skills/<name>/` 整个目录复制到 `~/.pi/agent/skills/<name>/`
 2. 新会话即可被自动发现
 
-## 三、VSCode 扩展
+## 三、DSH 插件
+
+DeepSeek Harness 的 Web UI 插件，装进 DSH profile 后直接在界面里生效。和上面两类一样按需安装，互不依赖。
+
+```sh
+git clone https://github.com/L-uvx/sth4agent
+cd ~/.dsh/profiles/<profile>
+pnpm add "link:/abs/path/to/sth4agent/dsh-plugins/codeplan-usage"
+```
+
+再把 `@local/codeplan-usage` 加进该 profile `package.json` 的 `dsh.profile.bundles`，然后重启 DSH（Host 半边是 ESM，不热更新）。插件自带 `cordis.patch.yml`，bundle 挂上后会自行注册，不必手改 `cordis.yml`。
+
+各插件的配置项、token 位置、可调参数见其目录下的 README。
+
+## 四、VSCode 扩展
 
 Windows：
 
@@ -57,8 +72,9 @@ code --install-extension copy-path-lines-1.0.0.vsix
 
 vsix 产物放在 GitHub Releases，不进 git
 
-## 四、扩展清单
+## 五、扩展清单
 
 | 扩展 | 说明 |
 | --- | --- |
 | [`copy-path-lines`](vscode-extensions/copy-path-lines/README.md) | 把选中区复制成 `路径#L42-L58` 引用，贴给 AI / issue / 终端 |
+| [`codeplan-usage`](dsh-plugins/codeplan-usage/README.md) | DSH 插件：在输入框下方显示 Coding Plan 额度占用，可手动刷新 |
